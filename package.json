@@ -1,0 +1,17 @@
+{
+  "name": "variable-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma plugin: compare two frames for variable-binding parity and detect hardcoded values.",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.108.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}
