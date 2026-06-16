@@ -87,6 +87,15 @@ variable-checker/
   (`getVariableByIdAsync`, `getVariableCollectionByIdAsync`).
 - `networkAccess: { allowedDomains: ["none"] }` — 외부 통신 없음.
 
+## 라이센스
+
+소스 공개(source-available) 라이센스 — MIT를 베이스로 하되, **이 코드를
+Figma 플러그인으로 배포(Community 게시, 사내/조직 플러그인, 기타 제3자에게
+실행 가능한 형태로 배포)하려면 사전 서면 허락이 필요**합니다. 읽기·학습·
+기여 목적의 포크·내부 평가·개인 수정은 자유롭게 가능합니다.
+
+전문은 [LICENSE](LICENSE) 참조.
+
 ## 알려진 한계 (v0 후속)
 
 - effects / gradient / image 페인트는 **감지만** 하고 토큰 상세 비교 안 함.

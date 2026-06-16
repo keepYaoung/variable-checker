@@ -98,6 +98,16 @@ Run `npm run typecheck` after type changes, `npm test` after touching
   **async** API (`getVariableByIdAsync`, `getVariableCollectionByIdAsync`).
 - `networkAccess: { allowedDomains: ["none"] }` — no outbound traffic.
 
+## License
+
+Source-available, MIT-based with one added restriction: **distributing this
+code as a Figma plugin** (Community publish, private/org plugin, or any other
+form of plugin distribution to third parties) **requires prior written
+permission** from the copyright holder. Reading, learning, forking for
+contribution, internal evaluation, and personal modification are free.
+
+See [LICENSE](LICENSE) for the full text.
+
 ## Known limits (deferred past v0)
 
 - Effects / gradient / image paints are *detected*, not deep-compared against
