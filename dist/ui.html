@@ -1,8 +1,391 @@
-<!-- Placeholder UI — replaced in Phase 4. -->
 <!doctype html>
+<html>
+<head>
 <meta charset="utf-8" />
 <title>Variable Checker</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e8e8e8;
+    --accent: #18a0fb;
+    --ok: #14ae5c;
+    --warn: #d97706;
+    --mismatch: #e0392f;
+    --code-bg: #f5f6f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --fg: #f0f0f0;
+      --muted: #9aa0a6;
+      --border: #2d2d2d;
+      --code-bg: #2a2a2a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: var(--fg);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    flex: 0 0 auto;
+  }
+  .frames {
+    flex: 1;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  button:hover { filter: brightness(1.1); }
+  .summary {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+  }
+  .chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--code-bg);
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .chip.ok { color: var(--ok); }
+  .chip.mismatch { color: var(--mismatch); }
+  .chip.warn { color: var(--warn); }
+  .chip.hardcoded { color: var(--mismatch); }
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex: 0 0 auto;
+  }
+  .tab {
+    flex: 1;
+    padding: 8px 12px;
+    text-align: center;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-weight: 600;
+    user-select: none;
+  }
+  .tab.active {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+  }
+  .body {
+    flex: 1;
+    overflow-y: auto;
+  }
+  section { display: none; }
+  section.active { display: block; }
+  .empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .error {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--mismatch);
+    line-height: 1.5;
+  }
+  .item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .item:hover { background: var(--code-bg); }
+  .item .row1 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .path {
+    font-weight: 600;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .prop {
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+  }
+  .verdict {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .v-diff-token, .v-one-hardcoded, .v-structure-prop {
+    background: rgba(224, 57, 47, 0.13);
+    color: var(--mismatch);
+  }
+  .v-both-hardcoded {
+    background: rgba(217, 119, 6, 0.15);
+    color: var(--warn);
+  }
+  .v-ok {
+    background: rgba(20, 174, 92, 0.13);
+    color: var(--ok);
+  }
+  .sides {
+    margin-top: 6px;
+    display: flex;
+    gap: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+  }
+  .sides > div { flex: 1; min-width: 0; word-break: break-all; }
+  .side-label {
+    color: var(--muted);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .modes {
+    margin-top: 8px;
+    background: var(--code-bg);
+    padding: 8px;
+    border-radius: 6px;
+  }
+  .modes .vname {
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .modes table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+  }
+  .modes th, .modes td {
+    text-align: left;
+    padding: 2px 6px 2px 0;
+  }
+  .modes th {
+    color: var(--muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+</style>
+</head>
 <body>
-  <p>Loading…</p>
-  <script>parent.postMessage({ pluginMessage: { type: 'run' } }, '*');</script>
+  <header>
+    <div class="frames" id="frames">Variable Checker</div>
+    <button id="rerun">Re-run</button>
+  </header>
+  <div class="summary" id="summary"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="mismatches">Mismatches</div>
+    <div class="tab" data-tab="structure">Structure</div>
+    <div class="tab" data-tab="hardcoded">Hardcoded</div>
+    <div class="tab" data-tab="ok">OK</div>
+  </div>
+  <div class="body">
+    <section class="active" id="tab-mismatches"></section>
+    <section id="tab-structure"></section>
+    <section id="tab-hardcoded"></section>
+    <section id="tab-ok"></section>
+  </div>
+
+<script>
+  function el(html) {
+    const t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstChild;
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[c]);
+  }
+  function bindingLabel(b) {
+    if (!b) return '—';
+    if (b.kind === 'variable') return '\u{1F517} ' + esc(b.variableName);
+    if (b.kind === 'hardcoded') return '\u{1F4CC} ' + esc(b.rawValue);
+    if (b.kind === 'mixed') return '\u{26A0}\u{FE0F} mixed';
+    return '—';
+  }
+  function send(msg) {
+    parent.postMessage({ pluginMessage: msg }, '*');
+  }
+  function pickNodeId(f) {
+    return f.nodeIdA || f.nodeIdB || '';
+  }
+  function renderModes(varInfo) {
+    if (!varInfo || !varInfo.modes || !varInfo.modes.length) return '';
+    const rows = varInfo.modes.map((m) =>
+      '<tr><td>' + esc(m.modeName) + '</td><td>' + esc(m.value) + '</td></tr>',
+    ).join('');
+    return '<div class="modes">' +
+      '<div class="vname">' + esc(varInfo.variableName) + ' · ' + esc(varInfo.collectionName) + '</div>' +
+      '<table><thead><tr><th>Mode</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '</div>';
+  }
+  function renderFinding(f) {
+    const v = f.verdict;
+    return el(
+      '<div class="item" data-id="' + esc(pickNodeId(f)) + '">' +
+        '<div class="row1">' +
+          '<span class="verdict v-' + esc(v) + '">' + esc(v.replace(/-/g, ' ')) + '</span>' +
+          '<span class="path">' + esc(f.pathKey) + '</span>' +
+          '<span class="prop">· ' + esc(f.prop) + '</span>' +
+        '</div>' +
+        '<div class="sides">' +
+          '<div><span class="side-label">A</span>' + bindingLabel(f.a) + '</div>' +
+          '<div><span class="side-label">B</span>' + bindingLabel(f.b) + '</div>' +
+        '</div>' +
+        renderModes(f.varInfo) +
+      '</div>'
+    );
+  }
+  function clear(id) {
+    document.getElementById(id).innerHTML = '';
+  }
+  function setEmpty(id, text) {
+    document.getElementById(id).innerHTML = '<div class="empty">' + esc(text) + '</div>';
+  }
+  function renderMismatches(report) {
+    clear('tab-mismatches');
+    const list = report.findings.filter((f) => f.verdict !== 'ok');
+    if (!list.length) return setEmpty('tab-mismatches', 'No mismatches.');
+    const c = document.getElementById('tab-mismatches');
+    for (const f of list) c.appendChild(renderFinding(f));
+  }
+  function renderOk(report) {
+    clear('tab-ok');
+    const list = report.findings.filter((f) => f.verdict === 'ok');
+    if (!list.length) return setEmpty('tab-ok', 'No matched bindings.');
+    const c = document.getElementById('tab-ok');
+    for (const f of list) c.appendChild(renderFinding(f));
+  }
+  function renderStructure(report) {
+    clear('tab-structure');
+    const a = report.structureOnlyInA;
+    const b = report.structureOnlyInB;
+    if (!a.length && !b.length) return setEmpty('tab-structure', 'Layer structures match.');
+    const c = document.getElementById('tab-structure');
+    const make = (entry, side) =>
+      el(
+        '<div class="item" data-id="' + esc(entry.nodeId) + '">' +
+          '<div class="row1">' +
+            '<span class="verdict v-structure-prop">only in ' + side + '</span>' +
+            '<span class="path">' + esc(entry.pathKey) + '</span>' +
+          '</div>' +
+        '</div>'
+      );
+    for (const e of a) c.appendChild(make(e, 'A'));
+    for (const e of b) c.appendChild(make(e, 'B'));
+  }
+  function renderHardcoded(report) {
+    clear('tab-hardcoded');
+    const total = report.hardcodedInA.length + report.hardcodedInB.length;
+    if (!total) return setEmpty('tab-hardcoded', 'No hardcoded values.');
+    const c = document.getElementById('tab-hardcoded');
+    const make = (entry, side) =>
+      el(
+        '<div class="item" data-id="' + esc(entry.nodeId) + '">' +
+          '<div class="row1">' +
+            '<span class="verdict v-one-hardcoded">' + side + '</span>' +
+            '<span class="path">' + esc(entry.pathKey) + '</span>' +
+            '<span class="prop">· ' + esc(entry.prop) + '</span>' +
+          '</div>' +
+          '<div class="sides"><div>\u{1F4CC} ' + esc(entry.rawValue) + '</div></div>' +
+        '</div>'
+      );
+    for (const e of report.hardcodedInA) c.appendChild(make(e, 'A'));
+    for (const e of report.hardcodedInB) c.appendChild(make(e, 'B'));
+  }
+  function renderSummary(report) {
+    const s = report.summary;
+    document.getElementById('frames').textContent =
+      report.frameAName + ' ↔ ' + report.frameBName;
+    document.getElementById('summary').innerHTML =
+      '<span class="chip ok">OK ' + s.ok + '</span>' +
+      '<span class="chip mismatch">Mismatch ' + s.mismatch + '</span>' +
+      '<span class="chip warn">Warn ' + s.warn + '</span>' +
+      '<span class="chip hardcoded">Hardcoded ' + s.hardcoded + '</span>' +
+      '<span class="chip">Structure ' + s.structureDiff + '</span>';
+  }
+  function renderReport(report) {
+    renderSummary(report);
+    renderMismatches(report);
+    renderStructure(report);
+    renderHardcoded(report);
+    renderOk(report);
+  }
+  function renderError(message) {
+    document.getElementById('frames').textContent = 'Variable Checker';
+    document.getElementById('summary').innerHTML = '';
+    for (const id of ['tab-structure', 'tab-hardcoded', 'tab-ok']) clear(id);
+    document.getElementById('tab-mismatches').innerHTML =
+      '<div class="error">' + esc(message) + '</div>';
+  }
+
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+      document.querySelectorAll('section').forEach((x) => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+    });
+  });
+
+  document.getElementById('rerun').addEventListener('click', () => {
+    send({ type: 'run' });
+  });
+
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.item');
+    if (!item) return;
+    const id = item.dataset.id;
+    if (id) send({ type: 'select-node', nodeId: id });
+  });
+
+  window.onmessage = (event) => {
+    const msg = event.data && event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'report') renderReport(msg.report);
+    else if (msg.type === 'error') renderError(msg.message);
+  };
+</script>
 </body>
+</html>
