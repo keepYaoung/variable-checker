@@ -1,6 +1,6 @@
 {
-  "name": "Variable Checker",
-  "id": "variable-checker-keepyaoung",
+  "name": "Variable Token Checker",
+  "id": "variable-token-checker-keepyaoung",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",

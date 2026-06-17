@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Variable Checker</title>
+<title>Variable Token Checker</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -42,14 +42,10 @@
   header {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
     background: var(--bg);
     flex: 0 0 auto;
   }
   .frames {
-    flex: 1;
     font-weight: 600;
     min-width: 0;
     overflow: hidden;
@@ -128,7 +124,6 @@
     border-bottom: 1px solid var(--border);
     cursor: pointer;
   }
-  .item:hover { background: var(--code-bg); }
   .item .row1 {
     display: flex;
     align-items: center;
@@ -152,6 +147,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    border: 1px solid transparent;
   }
   .v-diff-token, .v-one-hardcoded, .v-structure-prop {
     background: rgba(224, 57, 47, 0.13);
@@ -164,6 +160,8 @@
   .v-ok {
     background: rgba(20, 174, 92, 0.13);
     color: var(--ok);
+    text-transform: none;
+    letter-spacing: normal;
   }
   .sides {
     margin-top: 6px;
@@ -173,11 +171,30 @@
     font-size: 11px;
   }
   .sides > div { flex: 1; min-width: 0; word-break: break-all; }
+  .sides.one {
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .sep { color: var(--muted); }
   .side-label {
     color: var(--muted);
     font-weight: 700;
     margin-right: 4px;
   }
+  .valchip {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    word-break: break-all;
+  }
+  .muted { color: var(--muted); }
+  .coll { color: var(--muted); }
   .modes {
     margin-top: 8px;
     background: var(--code-bg);
@@ -205,25 +222,181 @@
     font-weight: 500;
     border-bottom: 1px solid var(--border);
   }
+  .thumbs {
+    margin-top: 8px;
+    display: flex;
+    gap: 12px;
+  }
+  .thumb { flex: 1; min-width: 0; }
+  .thumb .tlabel {
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 10px;
+    margin-bottom: 3px;
+  }
+  .thumb img {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    object-position: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--code-bg);
+  }
+  .count {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .chev {
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    border-left: 5px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.12s ease;
+  }
+  .item:not(.collapsed) .chev { transform: rotate(90deg); }
+  .item.collapsed .group-body { display: none; }
+  .expand-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+  .expand-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    color: color-mix(in srgb, color-mix(in srgb, var(--accent) 50%, var(--muted)) 70%, white);
+    border: none;
+    padding: 2px 0;
+  }
+  .expand-btn:hover { text-decoration: underline; filter: none; }
+  .expand-btn .exlabel::before { content: 'Expand layers'; }
+  .item:not(.collapsed) .expand-btn .exlabel::before { content: 'Collapse'; }
+  .sublist {
+    margin-top: 8px;
+  }
+  .subrow {
+    padding: 8px 0 0 10px;
+    margin-top: 8px;
+    border-left: 2px solid var(--border);
+    cursor: pointer;
+  }
+  .subrow:first-child { margin-top: 0; }
+  .subrow:hover { border-left-color: var(--accent); background: rgba(0, 0, 0, 0.03); }
+  .subrow.selected { border-left-color: var(--accent); }
+  .subrow.selected .modes { filter: invert(1); }
+  .item.selected { box-shadow: inset 2px 0 0 var(--accent); }
+  .subpath {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--fg);
+  }
+  .tag-name {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: var(--code-bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .kind {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    /* Tint stays distinguishable from the row background on hover, both themes. */
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .swatch {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    border: 1px solid rgba(128, 128, 128, 0.45);
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+  /* Keep swatches showing their true color even when the block is inverted. */
+  .subrow.selected .modes .swatch { filter: invert(1); }
+  .footer {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .footer button {
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 7px;
+  }
+  #rename-all {
+    background: var(--code-bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .resize {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    color: var(--muted);
+    cursor: nwse-resize;
+    z-index: 20;
+    touch-action: none;
+    opacity: 0.7;
+  }
+  .resize:hover { opacity: 1; }
+  .resize svg { pointer-events: none; }
 </style>
 </head>
 <body>
   <header>
-    <div class="frames" id="frames">Variable Checker</div>
-    <button id="rerun">Re-run</button>
+    <div class="frames" id="frames">Variable Token Checker</div>
   </header>
   <div class="summary" id="summary"></div>
   <div class="tabs">
-    <div class="tab active" data-tab="mismatches">Mismatches</div>
+    <div class="tab active" data-tab="ok">Matched</div>
+    <div class="tab" data-tab="mismatches">Mismatches</div>
     <div class="tab" data-tab="structure">Structure</div>
     <div class="tab" data-tab="hardcoded">Hardcoded</div>
-    <div class="tab" data-tab="ok">OK</div>
   </div>
   <div class="body">
-    <section class="active" id="tab-mismatches"></section>
+    <section class="active" id="tab-ok"></section>
+    <section id="tab-mismatches"></section>
     <section id="tab-structure"></section>
     <section id="tab-hardcoded"></section>
-    <section id="tab-ok"></section>
+  </div>
+  <div class="footer">
+    <button id="rename-all">Unify Layer Names</button>
+    <button id="rerun">Compare</button>
+  </div>
+  <div id="resize" class="resize" title="Drag to resize">
+    <svg viewBox="0 0 16 16" width="16" height="16">
+      <path d="M6 15 L15 6 M10 15 L15 10" stroke="currentColor" stroke-width="1.4" fill="none" />
+    </svg>
   </div>
 
 <script>
@@ -237,45 +410,194 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[c]);
   }
-  function bindingLabel(b) {
-    if (!b) return '—';
-    if (b.kind === 'variable') return '\u{1F517} ' + esc(b.variableName);
-    if (b.kind === 'hardcoded') return '\u{1F4CC} ' + esc(b.rawValue);
-    if (b.kind === 'mixed') return '\u{26A0}\u{FE0F} mixed';
-    return '—';
+  function bindingText(b) {
+    if (!b) return null;
+    if (b.kind === 'variable') return b.variableName;
+    if (b.kind === 'style') return b.styleName;
+    if (b.kind === 'hardcoded') return b.rawValue;
+    if (b.kind === 'mixed') return 'mixed';
+    return null;
+  }
+  function valChip(text) {
+    return text == null
+      ? '<span class="muted">—</span>'
+      : '<span class="valchip">' + esc(text) + '</span>';
+  }
+  function sameBinding(a, b) {
+    const ta = bindingText(a);
+    return ta != null && ta === bindingText(b);
+  }
+  // Value display. When both sides are identical (already matched — the parent
+  // group already shows the match) we drop the "A · B" label and show the value
+  // chip · kind chip · collection. Otherwise show A and B side by side.
+  function renderSides(a, b, typeLabel, kindChip) {
+    const ta = bindingText(a);
+    const tb = bindingText(b);
+    if (sameBinding(a, b)) {
+      const parts = [valChip(ta), kindChip];
+      if (typeLabel) {
+        parts.push('<span class="coll">' + esc(typeLabel) + '</span>');
+      }
+      return '<div class="sides one">' + parts.join('<span class="sep">·</span>') + '</div>';
+    }
+    return '<div class="sides">' +
+      '<div><span class="side-label">A</span>' + valChip(ta) + '</div>' +
+      '<div><span class="side-label">B</span>' + valChip(tb) + '</div>' +
+      '</div>';
   }
   function send(msg) {
     parent.postMessage({ pluginMessage: msg }, '*');
   }
-  function pickNodeId(f) {
-    return f.nodeIdA || f.nodeIdB || '';
+  // Grouping is driven by finding.groupKey (computed in compare.ts, with the
+  // shared frame/wrapper path already stripped). The label is its last segment.
+  function groupLabelOf(groupKey) {
+    const segs = groupKey.split('/');
+    return segs[segs.length - 1];
   }
-  function renderModes(varInfo) {
+  function subPathOf(pathKey, groupKey) {
+    if (pathKey === groupKey) return '';
+    return pathKey.slice(groupKey.length + 1);
+  }
+  // Keep only the last n path segments (default 3) for readability; prefix with
+  // "…/" when truncated. Full path is kept for the hover title elsewhere.
+  function shortPath(path, n) {
+    n = n || 3;
+    const segs = String(path).split('/');
+    if (segs.length <= n) return path;
+    return '…/' + segs.slice(-n).join('/');
+  }
+  var currentMatched = {};
+  var currentSelection = {};
+  function isSelected(elm) {
+    const a = elm.dataset.idA;
+    const b = elm.dataset.idB;
+    return Boolean((a && currentSelection[a]) || (b && currentSelection[b]));
+  }
+  function applySelection() {
+    const els = document.querySelectorAll('.subrow, .item');
+    for (const elm of els) {
+      if (isSelected(elm)) elm.classList.add('selected');
+      else elm.classList.remove('selected');
+    }
+  }
+  function valueCell(value) {
+    // Prepend a real color swatch when the value is a hex color.
+    if (/^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(value)) {
+      return '<span class="swatch" style="background:' + esc(value) + '"></span>' + esc(value);
+    }
+    return esc(value);
+  }
+  function renderModes(varInfo, showName) {
     if (!varInfo || !varInfo.modes || !varInfo.modes.length) return '';
     const rows = varInfo.modes.map((m) =>
-      '<tr><td>' + esc(m.modeName) + '</td><td>' + esc(m.value) + '</td></tr>',
+      '<tr><td>' + esc(m.modeName) + '</td><td>' + valueCell(m.value) + '</td></tr>',
     ).join('');
-    return '<div class="modes">' +
-      '<div class="vname">' + esc(varInfo.variableName) + ' · ' + esc(varInfo.collectionName) + '</div>' +
+    const head = showName
+      ? '<div class="vname">' + esc(varInfo.variableName) + ' · ' + esc(varInfo.collectionName) + '</div>'
+      : '';
+    return '<div class="modes">' + head +
       '<table><thead><tr><th>Mode</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '</div>';
   }
-  function renderFinding(f) {
+  var currentPreviews = {};
+  var currentBgA = '';
+  var currentBgB = '';
+  function thumbHtml(label, id, bg) {
+    if (!id || !currentPreviews[id]) return '';
+    const style = bg ? ' style="background:' + esc(bg) + '"' : '';
+    return '<div class="thumb"><div class="tlabel">' + label + '</div>' +
+      '<img' + style + ' src="' + currentPreviews[id] + '" /></div>';
+  }
+  // Friendly chip label for a prop key (users don't read "fills[0].color").
+  // Friendly chip label. Multiple fills/strokes on one layer are numbered
+  // (Fill, Fill 2, Fill 3 ...); the first stays unnumbered.
+  function propKindLabel(prop) {
+    if (prop === 'fillStyle') return 'Fill';
+    if (prop === 'strokeStyle') return 'Stroke';
+    const m = /^(fills|strokes)\[(\d+)\]/.exec(prop);
+    if (m) {
+      const base = m[1] === 'fills' ? 'Fill' : 'Stroke';
+      const idx = parseInt(m[2], 10);
+      return idx > 0 ? base + ' ' + (idx + 1) : base;
+    }
+    return prop.replace(/\[\d+\]/g, '').replace(/\.color$/, '');
+  }
+  // One row per finding (a single layer + prop), shown nested inside its group.
+  function renderSubRow(f, groupKey) {
     const v = f.verdict;
-    return el(
-      '<div class="item" data-id="' + esc(pickNodeId(f)) + '">' +
+    const sp = subPathOf(f.pathKey, groupKey);
+    const where = sp
+      ? '<span class="subpath" title="' + esc(sp) + '">' + esc(shortPath(sp)) + '</span>'
+      : '';
+    const nameTag = f.nameMatched
+      ? '<span class="tag-name" title="Paired by layer name (path differed)">name</span>'
+      : '';
+    const kindChip = '<span class="kind">' + esc(propKindLabel(f.prop)) + '</span>';
+    const same = sameBinding(f.a, f.b);
+    const typeLabel = f.a && f.a.kind === 'style'
+      ? 'Style'
+      : (f.varInfo && f.varInfo.collectionName) || '';
+    return '<div class="subrow" data-id-a="' + esc(f.nodeIdA || '') + '"' +
+        ' data-id-b="' + esc(f.nodeIdB || '') + '">' +
         '<div class="row1">' +
-          '<span class="verdict v-' + esc(v) + '">' + esc(v.replace(/-/g, ' ')) + '</span>' +
-          '<span class="path">' + esc(f.pathKey) + '</span>' +
-          '<span class="prop">· ' + esc(f.prop) + '</span>' +
+          '<span class="verdict v-' + esc(v) + '">' + esc(v === 'ok' ? 'Matched' : v.replace(/-/g, ' ')) + '</span>' +
+          (same ? '' : kindChip) +
+          nameTag +
+          where +
         '</div>' +
-        '<div class="sides">' +
-          '<div><span class="side-label">A</span>' + bindingLabel(f.a) + '</div>' +
-          '<div><span class="side-label">B</span>' + bindingLabel(f.b) + '</div>' +
+        renderSides(f.a, f.b, typeLabel, kindChip) +
+        renderModes(f.varInfo, !same) +
+      '</div>';
+  }
+  // One list item per top-level matched layer; sub-layers nested inside it.
+  function renderGroup(group) {
+    const ids = currentMatched[group.key] || {};
+    const idA = ids.nodeIdA || '';
+    const idB = ids.nodeIdB || '';
+    const thumbs =
+      (idA && currentPreviews[idA]) || (idB && currentPreviews[idB])
+        ? '<div class="thumbs">' + thumbHtml('A', idA, currentBgA) + thumbHtml('B', idB, currentBgB) + '</div>'
+        : '';
+    const rows = group.findings.map((f) => renderSubRow(f, group.key)).join('');
+    const noun = group.findings.length === 1 ? 'item' : 'items';
+    // Collapsed by default: the top-level layer header + thumbnail stay visible
+    // for identification; only the sub-layer list folds away behind the button.
+    return el(
+      '<div class="item collapsed" data-id-a="' + esc(idA) + '" data-id-b="' + esc(idB) + '">' +
+        '<div class="row1">' +
+          '<span class="path">' + esc(group.label) + '</span>' +
+          '<span class="count">' + group.findings.length + ' ' + noun + '</span>' +
         '</div>' +
-        renderModes(f.varInfo) +
+        thumbs +
+        '<div class="expand-row">' +
+          '<button class="expand-btn"><span class="chev"></span><span class="exlabel"></span></button>' +
+        '</div>' +
+        '<div class="group-body">' +
+          '<div class="sublist">' + rows + '</div>' +
+        '</div>' +
       '</div>'
     );
+  }
+  function renderGroups(containerId, list, emptyText) {
+    clear(containerId);
+    // Only findings with a groupKey are grouped; '' means the shared wrapper
+    // (frame) itself, which is excluded.
+    list = list.filter((f) => f.groupKey);
+    if (!list.length) return setEmpty(containerId, emptyText);
+    const groups = [];
+    const byKey = {};
+    for (const f of list) {
+      const gk = f.groupKey;
+      let g = byKey[gk];
+      if (!g) {
+        g = { key: gk, label: groupLabelOf(gk), findings: [] };
+        byKey[gk] = g;
+        groups.push(g);
+      }
+      g.findings.push(f);
+    }
+    const c = document.getElementById(containerId);
+    for (const g of groups) c.appendChild(renderGroup(g));
   }
   function clear(id) {
     document.getElementById(id).innerHTML = '';
@@ -284,18 +606,10 @@
     document.getElementById(id).innerHTML = '<div class="empty">' + esc(text) + '</div>';
   }
   function renderMismatches(report) {
-    clear('tab-mismatches');
-    const list = report.findings.filter((f) => f.verdict !== 'ok');
-    if (!list.length) return setEmpty('tab-mismatches', 'No mismatches.');
-    const c = document.getElementById('tab-mismatches');
-    for (const f of list) c.appendChild(renderFinding(f));
+    renderGroups('tab-mismatches', report.findings.filter((f) => f.verdict !== 'ok'), 'No mismatches.');
   }
   function renderOk(report) {
-    clear('tab-ok');
-    const list = report.findings.filter((f) => f.verdict === 'ok');
-    if (!list.length) return setEmpty('tab-ok', 'No matched bindings.');
-    const c = document.getElementById('tab-ok');
-    for (const f of list) c.appendChild(renderFinding(f));
+    renderGroups('tab-ok', report.findings.filter((f) => f.verdict === 'ok'), 'No matched bindings.');
   }
   function renderStructure(report) {
     clear('tab-structure');
@@ -308,7 +622,7 @@
         '<div class="item" data-id="' + esc(entry.nodeId) + '">' +
           '<div class="row1">' +
             '<span class="verdict v-structure-prop">only in ' + side + '</span>' +
-            '<span class="path">' + esc(entry.pathKey) + '</span>' +
+            '<span class="path" title="' + esc(entry.pathKey) + '">' + esc(shortPath(entry.pathKey)) + '</span>' +
           '</div>' +
         '</div>'
       );
@@ -325,7 +639,7 @@
         '<div class="item" data-id="' + esc(entry.nodeId) + '">' +
           '<div class="row1">' +
             '<span class="verdict v-one-hardcoded">' + side + '</span>' +
-            '<span class="path">' + esc(entry.pathKey) + '</span>' +
+            '<span class="path" title="' + esc(entry.pathKey) + '">' + esc(shortPath(entry.pathKey)) + '</span>' +
             '<span class="prop">· ' + esc(entry.prop) + '</span>' +
           '</div>' +
           '<div class="sides"><div>\u{1F4CC} ' + esc(entry.rawValue) + '</div></div>' +
@@ -339,21 +653,33 @@
     document.getElementById('frames').textContent =
       report.frameAName + ' ↔ ' + report.frameBName;
     document.getElementById('summary').innerHTML =
-      '<span class="chip ok">OK ' + s.ok + '</span>' +
+      '<span class="chip ok">Matched ' + s.ok + '</span>' +
       '<span class="chip mismatch">Mismatch ' + s.mismatch + '</span>' +
       '<span class="chip warn">Warn ' + s.warn + '</span>' +
       '<span class="chip hardcoded">Hardcoded ' + s.hardcoded + '</span>' +
       '<span class="chip">Structure ' + s.structureDiff + '</span>';
   }
-  function renderReport(report) {
+  var currentReport = null;
+  function renderReport(report, previews, bgA, bgB) {
+    currentReport = report;
+    currentPreviews = previews || {};
+    currentBgA = bgA || '';
+    currentBgB = bgB || '';
+    currentMatched = {};
+    const pairs = report.matchedPairs || [];
+    for (const p of pairs) currentMatched[p.pathKey] = p;
     renderSummary(report);
     renderMismatches(report);
     renderStructure(report);
     renderHardcoded(report);
     renderOk(report);
+    applySelection();
+    // Fresh results -> scroll back to the top.
+    const body = document.querySelector('.body');
+    if (body) body.scrollTop = 0;
   }
   function renderError(message) {
-    document.getElementById('frames').textContent = 'Variable Checker';
+    document.getElementById('frames').textContent = 'Variable Token Checker';
     document.getElementById('summary').innerHTML = '';
     for (const id of ['tab-structure', 'tab-hardcoded', 'tab-ok']) clear(id);
     document.getElementById('tab-mismatches').innerHTML =
@@ -373,17 +699,98 @@
     send({ type: 'run' });
   });
 
+  function dedupePairs(pairs) {
+    const seen = {};
+    const out = [];
+    for (const p of pairs) {
+      if (!p.nodeIdA && !p.nodeIdB) continue;
+      const k = (p.nodeIdA || '') + '|' + (p.nodeIdB || '');
+      if (seen[k]) continue;
+      seen[k] = true;
+      out.push(p);
+    }
+    return out;
+  }
+  document.getElementById('rename-all').addEventListener('click', () => {
+    const findings = currentReport ? currentReport.findings : [];
+    const pairs = dedupePairs(
+      findings
+        .filter((f) => f.nodeIdA && f.nodeIdB)
+        .map((f) => ({ nodeIdA: f.nodeIdA, nodeIdB: f.nodeIdB })),
+    );
+    if (!pairs.length) return;
+    // Empty name => unify each pair's B layer to A's existing name.
+    send({ type: 'rename', pairs: pairs, name: '' });
+  });
+
+  function selectFrom(elm) {
+    const idA = elm.dataset.idA;
+    const idB = elm.dataset.idB;
+    if (idA || idB) {
+      send({ type: 'select-pair', nodeIdA: idA || undefined, nodeIdB: idB || undefined });
+      return true;
+    }
+    const id = elm.dataset.id;
+    if (id) {
+      send({ type: 'select-node', nodeId: id });
+      return true;
+    }
+    return false;
+  }
   document.addEventListener('click', (e) => {
+    // A nested sub-layer row takes precedence over its group item.
+    const sub = e.target.closest('.subrow');
+    if (sub && selectFrom(sub)) return;
+    // The text button is the only way to collapse an opened card (toggles).
+    const btn = e.target.closest('.expand-btn');
+    if (btn) {
+      const owner = btn.closest('.item');
+      if (owner) owner.classList.toggle('collapsed');
+      return;
+    }
     const item = e.target.closest('.item');
     if (!item) return;
-    const id = item.dataset.id;
-    if (id) send({ type: 'select-node', nodeId: id });
+    // Clicking the card only expands (when collapsed); it never collapses.
+    if (item.classList.contains('collapsed') && item.querySelector('.group-body')) {
+      item.classList.remove('collapsed');
+    }
+    selectFrom(item);
   });
+
+  // Corner resize handle: drag to change the plugin window size.
+  (function () {
+    const handle = document.getElementById('resize');
+    let dragging = false;
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      // clientX/Y track the pointer inside the iframe ≈ the new size.
+      const width = Math.max(360, Math.round(e.clientX + 4));
+      const height = Math.max(360, Math.round(e.clientY + 4));
+      send({ type: 'resize', width: width, height: height });
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  })();
 
   window.onmessage = (event) => {
     const msg = event.data && event.data.pluginMessage;
     if (!msg) return;
-    if (msg.type === 'report') renderReport(msg.report);
+    if (msg.type === 'report') renderReport(msg.report, msg.previews, msg.bgA, msg.bgB);
+    else if (msg.type === 'selection') {
+      currentSelection = {};
+      for (const id of msg.ids || []) currentSelection[id] = true;
+      applySelection();
+    }
     else if (msg.type === 'error') renderError(msg.message);
   };
 </script>

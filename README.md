@@ -1,41 +1,68 @@
-# Variable Checker
+# Variable Token Checker
 
 > 🇰🇷 한국어 문서: [README.ko.md](README.ko.md)
 
-A Figma plugin that compares two frames with the **same layout but different modes**
-(e.g. Light / Dark). It checks whether matching layers bind the **same variable
-tokens**, shows each mode's resolved value side-by-side, and flags **hardcoded
-values** that should have been tokenized.
+A Figma plugin that compares **two frames** (e.g. Light / Dark, or before / after)
+and checks whether matching layers bind the **same design tokens** — variables
+**and** color styles. It flags **hardcoded** values, **token mismatches**, and
+**structural** differences, and can sync layer names between the two frames.
 
 ## Why
 
-When you build a screen in Light mode and a Dark version next to it, both frames
-should bind the same variable token on every layer — only the *mode value* of the
-token differs. Drift is easy to introduce: someone hardcodes a color, swaps a token
-for a similar-looking one, or adds a layer to one frame and forgets the other.
-This plugin surfaces all three.
+When you build a screen and a variant next to it, both frames should reference the
+same token on every layer — only the resolved value differs. Drift creeps in: a
+color gets hardcoded, a token is swapped for a similar-looking one, a Color Style
+replaces a variable, or a layer is added to one frame and not the other. This
+plugin surfaces all of it.
 
 ## What it checks
 
+A **token** is a referenced design token — a **variable** or a **color style**.
+Each matched property gets a verdict:
+
 | A side | B side | Verdict |
 |---|---|---|
-| variable X | variable X | **OK** (mode values shown) |
-| variable X | variable Y | **diff-token** |
-| variable | hardcoded | **one-hardcoded** |
-| hardcoded | variable | **one-hardcoded** |
+| token X | token X | **Matched** |
+| token X | token Y (incl. variable vs style) | **diff-token** |
+| token | hardcoded | **one-hardcoded** |
 | hardcoded | hardcoded | **both-hardcoded** (warn) |
-| variable | absent / mixed | **structure-prop** |
+| token | absent / mixed | **structure-prop** |
 
-Layer pairing uses **path keys**: the layer name chain from the root frame, with
-same-name siblings disambiguated by `[0]`, `[1]`, … indexes.
+- **Variables** are read per-paint (`fills[i].color`, `strokes[i].color`) and on
+  scalar props; matched bindings show a **Mode × Value** table with color swatches.
+- **Color styles** (node-level `fillStyle` / `strokeStyle`) are detected and
+  compared as tokens, so styled layers are no longer mistaken for hardcoded.
 
-## v0 scope
+### Property scope
 
 | Group | Properties |
 |---|---|
-| Color | `fills[i].color`, `strokes[i].color` (SOLID paints only; gradient / image flagged but not deep-compared) |
-| Scalars | `cornerRadius` (+ all four corners), `opacity`, `paddingLeft/Right/Top/Bottom`, `itemSpacing` |
+| Color | `fills[i].color`, `strokes[i].color` (SOLID); fill / stroke **color styles** |
+| Scalars | `cornerRadius` (+ four corners), `opacity`, `paddingLeft/Right/Top/Bottom`, `itemSpacing` |
 | Text | `fontSize`, `lineHeight`, `letterSpacing`, `fontWeight` |
+
+Gradient / image paints are detected but not deep-compared.
+
+## Layer pairing
+
+1. **Exact path** — the layer-name chain from the root, with same-name siblings
+   disambiguated by `[0]`, `[1]`, … indexes.
+2. **Name fallback** — layers that don't match by path are re-paired by **layer
+   name within the same group** and compared anyway (shown with a `name` tag).
+
+## UI
+
+- **Tabs**: Matched · Mismatches · Structure · Hardcoded.
+- **Grouped by top-level component** — the shared frame/wrapper path is stripped
+  automatically, so grouping starts where layers actually diverge.
+- **Collapsible cards** with A/B **thumbnails** whose backgrounds follow each
+  frame's resolved mode (light / dark token), for easy identification.
+- Lists are **sorted top-to-bottom by Y** position.
+- **Click a card** to select the matched layer pair (no viewport jump); the
+  current Figma selection is highlighted live. Click a sub-row to select that
+  specific sub-layer.
+- **Unify Layer Names** — rename each matched pair's B-side layer to A's name.
+- **Compare** re-runs the analysis; drag the bottom-right handle to resize.
 
 ## Install (development)
 
@@ -44,21 +71,15 @@ same-name siblings disambiguated by `[0]`, `[1]`, … indexes.
 3. In Figma desktop: **Plugins → Development → Import plugin from manifest…**
    and pick this folder's `manifest.json`.
 
-`dist/` is committed, so step 1 and 2 are only needed if you change the source.
+`dist/` is committed, so steps 1–2 are only needed if you change the source.
 
 ## Usage
 
-1. Select **exactly two** frames that should share token bindings
-   (e.g. a `Light` frame and a `Dark` frame).
-2. Run **Plugins → Development → Variable Checker**.
-3. Inspect the tabs:
-   - **Mismatches** — every non-OK finding (diff-token, one-hardcoded,
-     structure-prop, both-hardcoded).
-   - **Structure** — layers present in only one frame.
-   - **Hardcoded** — every non-tokenized value, per frame.
-   - **OK** — matched bindings, each expandable into a Mode × Value table.
-4. Click any item to jump to that layer in the canvas.
-5. Change the selection and hit **Re-run**.
+1. Select **exactly two** frames that should share token bindings.
+2. Run **Plugins → Development → Variable Token Checker**.
+3. Inspect the tabs; expand a card to see each layer's findings.
+4. Click items to select the corresponding layers on the canvas.
+5. Change the selection and hit **Compare**.
 
 ## Development
 
@@ -71,31 +92,30 @@ npm test            # node --test against the pure compare() function
 ### Layout
 
 ```
-variable-checker/
+variable-token-checker/
 ├─ manifest.json
 ├─ package.json
 ├─ tsconfig.json
 ├─ build.mjs              # esbuild bundle + ui.html copy
 ├─ src/
-│  ├─ code.ts             # Figma main thread (snapshot + variable resolution)
-│  ├─ compare.ts          # pure comparison (Figma-API-free, unit-testable)
+│  ├─ code.ts             # Figma main thread (snapshot, variable/style resolution, previews)
+│  ├─ compare.ts          # pure comparison + grouping (Figma-API-free, unit-testable)
 │  ├─ types.ts            # shared schema + ui<->code message types
 │  └─ ui.html             # UI thread (report renderer)
 ├─ test/
-│  └─ compare.test.mjs    # 8 cases over the verdict matrix
+│  └─ compare.test.mjs    # verdict matrix, grouping, name fallback, styles
 └─ dist/                  # build output (committed; referenced by manifest)
 ```
 
 ### Edit loop
 
 Edit a file under `src/` → `npm run build` → re-run the plugin in Figma.
-Run `npm run typecheck` after type changes, `npm test` after touching
-`compare.ts`.
+Run `npm run typecheck` after type changes, `npm test` after touching `compare.ts`.
 
 ## Manifest notes
 
-- `documentAccess: "dynamic-page"` — variable lookups therefore go through the
-  **async** API (`getVariableByIdAsync`, `getVariableCollectionByIdAsync`).
+- `documentAccess: "dynamic-page"` — variable/style lookups go through the
+  **async** API (`getVariableByIdAsync`, `getStyleByIdAsync`, …).
 - `networkAccess: { allowedDomains: ["none"] }` — no outbound traffic.
 
 ## License
@@ -108,11 +128,9 @@ contribution, internal evaluation, and personal modification are free.
 
 See [LICENSE](LICENSE) for the full text.
 
-## Known limits (deferred past v0)
+## Known limits
 
-- Effects / gradient / image paints are *detected*, not deep-compared against
-  tokens.
-- Layer pairing is purely name + same-name index — renaming a layer in one frame
-  shows up as a structure diff rather than a property diff.
-- Style-based tokens (non-variable) are not compared.
+- Effects / gradient / image paints are *detected*, not deep-compared.
+- Text styles (`textStyleId`) and effect styles are not yet compared (color
+  styles for fill / stroke are).
 - 3+ modes / cross-collection checks are out of scope.

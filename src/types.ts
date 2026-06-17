@@ -10,6 +10,7 @@ export type Binding =
       variableName: string;
       resolvedType: ResolvedType;
     }
+  | { kind: 'style'; styleId: string; styleName: string }
   | { kind: 'hardcoded'; rawValue: string }
   | { kind: 'mixed' }
   | { kind: 'absent' };
@@ -24,6 +25,8 @@ export interface NodeSnapshot {
   pathKey: string;
   name: string;
   type: string;
+  // Top position relative to the frame root, used to sort lists top-to-bottom.
+  y: number;
   props: PropSnapshot[];
 }
 
@@ -60,11 +63,20 @@ export interface Finding {
   a: Binding;
   b: Binding;
   varInfo?: VarInfo;
+  y?: number;
+  // pathKey of the top-level group this finding belongs to (common outer path
+  // — frame/wrappers — stripped). Empty string => belongs to the stripped
+  // wrapper itself and is excluded from grouped views. Set by compare().
+  groupKey?: string;
+  // True when the A/B layers were paired by name (within the same group) after
+  // exact path matching failed, rather than by exact pathKey.
+  nameMatched?: boolean;
 }
 
 export interface StructureEntry {
   pathKey: string;
   nodeId: string;
+  y?: number;
 }
 
 export interface HardcodedEntry {
@@ -72,6 +84,16 @@ export interface HardcodedEntry {
   nodeId: string;
   prop: string;
   rawValue: string;
+  y?: number;
+}
+
+// Every layer that exists (matched) in BOTH frames, keyed by pathKey. Lets the
+// UI resolve a top-level layer's node ids even when it has no finding of its own.
+export interface MatchedPair {
+  pathKey: string;
+  nodeIdA: string;
+  nodeIdB: string;
+  y?: number;
 }
 
 export interface Report {
@@ -81,6 +103,7 @@ export interface Report {
   structureOnlyInA: StructureEntry[];
   structureOnlyInB: StructureEntry[];
   findings: Finding[];
+  matchedPairs: MatchedPair[];
   hardcodedInA: HardcodedEntry[];
   hardcodedInB: HardcodedEntry[];
   summary: {
@@ -98,9 +121,27 @@ export type VarInfoCache = Record<string, VarInfo>;
 
 // Messages exchanged between code.ts and ui.html.
 export type CodeToUiMessage =
-  | { type: 'report'; report: Report }
+  // `previews` maps a nodeId to a base64 PNG data URL (matched-pair thumbnails).
+  // `bgA`/`bgB` are each frame's mode-resolved background color (hex) for the
+  // thumbnail backdrop.
+  | {
+      type: 'report';
+      report: Report;
+      previews?: Record<string, string>;
+      bgA?: string;
+      bgB?: string;
+    }
+  | { type: 'selection'; ids: string[] }
   | { type: 'error'; message: string };
 
 export type UiToCodeMessage =
   | { type: 'run' }
-  | { type: 'select-node'; nodeId: string };
+  | { type: 'select-node'; nodeId: string }
+  | { type: 'select-pair'; nodeIdA?: string; nodeIdB?: string }
+  // Rename matched layer pairs. `name` empty => sync B's name to A's existing name.
+  | {
+      type: 'rename';
+      pairs: { nodeIdA?: string; nodeIdB?: string }[];
+      name: string;
+    }
+  | { type: 'resize'; width: number; height: number };

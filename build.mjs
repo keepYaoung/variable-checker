@@ -9,7 +9,7 @@ const buildOptions = {
   outfile: 'dist/code.js',
   bundle: true,
   format: 'iife',
-  target: 'es2020',
+  target: 'es2016',
   platform: 'browser',
   logLevel: 'info',
 };

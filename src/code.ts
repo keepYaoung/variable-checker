@@ -6,9 +6,11 @@ import type {
   Binding,
   CodeToUiMessage,
   FrameSnapshot,
+  MatchedPair,
   ModeValue,
   NodeSnapshot,
   PropSnapshot,
+  Report,
   ResolvedType,
   UiToCodeMessage,
   VarInfo,
@@ -265,17 +267,41 @@ async function extractScalarProp(
   return null;
 }
 
+// Resolve a paint-style id (node-level fill/stroke color style) to a binding.
+const styleNameCache: Map<string, string> = new Map();
+async function styleBinding(styleId: string): Promise<Binding> {
+  let name = styleNameCache.get(styleId);
+  if (name === undefined) {
+    const style = await figma.getStyleByIdAsync(styleId);
+    name = style ? style.name : '(missing style)';
+    styleNameCache.set(styleId, name);
+  }
+  return { kind: 'style', styleId, styleName: name };
+}
+
 async function extractProps(node: SceneNode): Promise<PropSnapshot[]> {
   const props: PropSnapshot[] = [];
   const anyNode = node as AnyNode;
 
+  // A node-level color style governs all of the node's fills/strokes, so prefer
+  // it over per-paint extraction (otherwise the styled colors look hardcoded).
   if ('fills' in node) {
-    const fills = (node as GeometryMixin).fills;
-    props.push(...(await extractPaintProps('fills', fills)));
+    const styleId = anyNode.fillStyleId;
+    if (typeof styleId === 'string' && styleId !== '') {
+      props.push({ prop: 'fillStyle', binding: await styleBinding(styleId) });
+    } else {
+      const fills = (node as GeometryMixin).fills;
+      props.push(...(await extractPaintProps('fills', fills)));
+    }
   }
   if ('strokes' in node) {
-    const strokes = (node as GeometryMixin).strokes;
-    props.push(...(await extractPaintProps('strokes', strokes)));
+    const styleId = anyNode.strokeStyleId;
+    if (typeof styleId === 'string' && styleId !== '') {
+      props.push({ prop: 'strokeStyle', binding: await styleBinding(styleId) });
+    } else {
+      const strokes = (node as GeometryMixin).strokes;
+      props.push(...(await extractPaintProps('strokes', strokes)));
+    }
   }
 
   for (const propName of SCALAR_NODE_PROPS) {
@@ -293,15 +319,25 @@ async function extractProps(node: SceneNode): Promise<PropSnapshot[]> {
   return props;
 }
 
+function nodeTop(node: SceneNode): number | null {
+  const box = (node as SceneNode & { absoluteBoundingBox?: Rect | null })
+    .absoluteBoundingBox;
+  return box ? box.y : null;
+}
+
 async function snapshotFrame(root: SceneNode): Promise<FrameSnapshot> {
   const keyed = flattenWithKeys(root);
+  const rootTop = nodeTop(root) ?? 0;
   const nodes: NodeSnapshot[] = [];
   for (const { node, key } of keyed) {
+    const top = nodeTop(node);
     nodes.push({
       nodeId: node.id,
       pathKey: key,
       name: node.name,
       type: node.type,
+      // Frame-relative top so both frames sort on the same origin.
+      y: top === null ? 0 : top - rootTop,
       props: await extractProps(node),
     });
   }
@@ -314,10 +350,79 @@ function post(msg: CodeToUiMessage) {
   figma.ui.postMessage(msg);
 }
 
+// Tell the UI which nodes are currently selected so it can highlight matching
+// rows. Fires on every selection change, including programmatic ones.
+function postSelection() {
+  post({ type: 'selection', ids: figma.currentPage.selection.map((n) => n.id) });
+}
+figma.on('selectionchange', postSelection);
+
 function varCacheToRecord(): VarInfoCache {
   const rec: VarInfoCache = {};
   for (const [id, cached] of varCache) rec[id] = cached.info;
   return rec;
+}
+
+// Export one thumbnail per grouped list item (the group-level layers) for the
+// UI preview. Group nodes are resolved from finding.groupKey via matchedPairs,
+// so only the layers the UI actually shows as group headers get exported.
+// Resolve a frame's effective background color, honoring any variable bound to
+// its fill for the frame's current mode (dark/light token). Returned as a hex
+// string for the UI to paint behind that side's thumbnails. undefined if none.
+async function resolveFrameBg(node: SceneNode): Promise<string | undefined> {
+  if (!('fills' in node)) return undefined;
+  const fills = (node as GeometryMixin).fills;
+  if (fills === figma.mixed) return undefined;
+  for (const p of fills) {
+    if (p.visible === false) continue;
+    if (p.type !== 'SOLID') continue;
+    const solid = p as SolidPaint;
+    const bound = solid.boundVariables && solid.boundVariables.color;
+    if (bound) {
+      const v = await figma.variables.getVariableByIdAsync(bound.id);
+      if (v) {
+        const resolved = v.resolveForConsumer(node).value;
+        if (resolved && typeof resolved === 'object' && 'r' in resolved) {
+          const c = resolved as RGBA;
+          return rgbaToHex(c.r, c.g, c.b, 'a' in c ? c.a : undefined);
+        }
+      }
+    }
+    return rgbaToHex(solid.color.r, solid.color.g, solid.color.b, solid.opacity);
+  }
+  return undefined;
+}
+
+async function buildPreviews(report: Report): Promise<Record<string, string>> {
+  const byPath: Record<string, MatchedPair> = {};
+  for (const p of report.matchedPairs) byPath[p.pathKey] = p;
+
+  const ids = new Set<string>();
+  const seenGroups = new Set<string>();
+  for (const f of report.findings) {
+    if (!f.groupKey || seenGroups.has(f.groupKey)) continue;
+    seenGroups.add(f.groupKey);
+    const mp = byPath[f.groupKey];
+    if (mp) {
+      ids.add(mp.nodeIdA);
+      ids.add(mp.nodeIdB);
+    }
+  }
+  const out: Record<string, string> = {};
+  for (const id of ids) {
+    try {
+      const node = await figma.getNodeByIdAsync(id);
+      if (!node || !('exportAsync' in node)) continue;
+      const bytes = await (node as unknown as ExportMixin).exportAsync({
+        format: 'PNG',
+        constraint: { type: 'WIDTH', value: 240 },
+      });
+      out[id] = 'data:image/png;base64,' + figma.base64Encode(bytes);
+    } catch (e) {
+      // Some nodes (zero-area, unsupported types) can't be exported — skip.
+    }
+  }
+  return out;
 }
 
 async function run() {
@@ -334,7 +439,11 @@ async function run() {
     const snapA = await snapshotFrame(a);
     const snapB = await snapshotFrame(b);
     const report = compare(snapA, snapB, varCacheToRecord());
-    post({ type: 'report', report });
+    const previews = await buildPreviews(report);
+    const bgA = await resolveFrameBg(a);
+    const bgB = await resolveFrameBg(b);
+    post({ type: 'report', report, previews, bgA, bgB });
+    postSelection();
   } catch (e) {
     post({
       type: 'error',
@@ -353,8 +462,53 @@ figma.ui.onmessage = async (msg: UiToCodeMessage) => {
     if (node && node.type !== 'PAGE' && node.type !== 'DOCUMENT') {
       const scene = node as SceneNode;
       figma.currentPage.selection = [scene];
-      figma.viewport.scrollAndZoomIntoView([scene]);
     }
+    return;
+  }
+  if (msg.type === 'select-pair') {
+    const ids = [msg.nodeIdA, msg.nodeIdB].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
+    const scenes: SceneNode[] = [];
+    for (const id of ids) {
+      const node = await figma.getNodeByIdAsync(id);
+      if (node && node.type !== 'PAGE' && node.type !== 'DOCUMENT') {
+        scenes.push(node as SceneNode);
+      }
+    }
+    if (scenes.length > 0) {
+      figma.currentPage.selection = scenes;
+    }
+    return;
+  }
+  if (msg.type === 'resize') {
+    const w = Math.max(360, Math.round(msg.width));
+    const h = Math.max(360, Math.round(msg.height));
+    figma.ui.resize(w, h);
+    return;
+  }
+  if (msg.type === 'rename') {
+    const newName = msg.name.trim();
+    const asScene = (n: BaseNode | null): SceneNode | null =>
+      n && n.type !== 'PAGE' && n.type !== 'DOCUMENT' ? (n as SceneNode) : null;
+    for (const pair of msg.pairs) {
+      const a = asScene(
+        pair.nodeIdA ? await figma.getNodeByIdAsync(pair.nodeIdA) : null,
+      );
+      const b = asScene(
+        pair.nodeIdB ? await figma.getNodeByIdAsync(pair.nodeIdB) : null,
+      );
+      if (newName) {
+        // Explicit name: unify both sides to it.
+        if (a) a.name = newName;
+        if (b) b.name = newName;
+      } else if (a && b) {
+        // No name given: match B to A's existing (layer-appropriate) name.
+        b.name = a.name;
+      }
+    }
+    // Renaming changes path keys, so re-snapshot to keep the report consistent.
+    await run();
   }
 };
 
